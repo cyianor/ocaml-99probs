@@ -1,0 +1,142 @@
+#+title: Roadmap for practicing OCaml
+#+author: Felix Held
+
+* Introduction
+
+I will use this document to write down some of my observations and thoughts
+while solving the exercises for OCaml at https://ocaml.org/exercises.
+I am hoping to continually learn more and use this as a living document.
+
+* Observations
+** Basic concepts
+  
+The exercises use a lot of recursion. I am mostly coming from C-like imperative
+languages and am not so accustomed to solving problems with recursion.
+However, it is an exciting experience to get into a new mindset.
+
+*** Tail-recursion
+A concept that exists in other languages as well (it is specific to recursion,
+not to OCaml), is /tail-recursion/. Recursive functions
+are somewhat related to the principle of induction. There is a /base-case/,
+when a list is constructed this is often the empty list, and more complex
+cases are reduced repeatedly until the base-case is reached, following a
+/recursion rule/. A simple example is
+
+#+begin_src ocaml :results verbatim
+  let rec factorial n =
+    if n <= 1 then 1 else n * factorial (n - 1);;
+  factorial 5;;
+#+end_src
+
+#+RESULTS:
+: - : int = 120
+
+This is a recursive function computing the factorial n!. The base case is 1
+and the recursion rule reduces ~factorial n~ to ~n * factorial (n - 1)~.
+This rule is repeated until ~n = 1~ (unless ~n = 1~ or ~n = 0~ already).
+
+The issue with this code is that each call to ~factorial~ creates a new
+stack frame. It is possible to avoid this by using /tail-recursion/.
+
+#+begin_src ocaml :results verbatim
+  let factorial n =
+    let rec aux n m = if n <= 1 then m
+                      else (aux [@tailcall]) (n - 1) (n * m)
+    in aux n 1;;
+  factorial 5;;
+#+end_src
+
+#+RESULTS:
+: - : int = 120
+
+This implementation uses a tail-recursive local function. The main difference
+is that the result is retained in the function arguments which enables the
+compiler to optimize the calls such that a single stack frame can be used.
+From what I read, tail-recursive functions are often converted to loops by
+the compiler.
+
+The attribute ~(aux [@tailcall])~ checks that ~aux~ is actually called as
+a tailcall and throws a warning if not. This makes it easy to double-check
+if tailcall optimization is actually happening.
+
+*** Matching
+
+OCaml supports a rich exhaustive pattern matching syntax which is very useful
+for concisely defining functions. I mostly used it for list destructuring
+so far. A basic example is
+
+#+begin_src ocaml :results verbatim
+  let rec double = function
+    | [] -> []
+    | h :: t -> (2 * h) :: double t;;
+  double [1; 2; 3; 4; 5;];;
+#+end_src
+
+#+RESULTS:
+: - : int list = [2; 4; 6; 8; 10]
+
+The syntax is far more powerful, e.g.
+
+#+begin_src ocaml :results verbatim
+  type 'a value =
+  | One of 'a
+  | Many of int * 'a;;
+
+  let rec double = function
+    | [] -> []
+    | One a :: t -> Many (2, a) :: double t
+    | Many (i, a) :: t -> Many (2 * i, a) :: double t;;
+
+  double [One "a"; Many (2, "b"); One "c"];;
+#+end_src
+
+#+RESULTS:
+: - : string value list = [Many (2, "a"); Many (4, "b"); Many (2, "c")]
+
+or
+
+#+begin_src ocaml :results verbatim
+  let pack l =
+    let rec aux acc = function
+      | [] -> []
+      | [ a ] -> a :: acc
+      | a :: (b :: _ as t) -> if a = b then aux acc t
+			      else aux (a :: acc) t
+    in
+    List.rev (aux [] l);;
+  
+  pack [1; 1; 2; 3; 4; 4; 4; 4];;
+#+end_src
+
+#+RESULTS:
+: - : int list = [1; 2; 3; 4]
+
+*** Lists and types
+
+In OCaml ~'a~ typically parametrizes a generic type. Tuples are
+described by asterisks, e.g. ~int * string~. So far I have not had
+a situation where I needed to annotate types and OCaml managed to
+infer the correct types.
+
+Lists in OCaml are singly-linked lists and must only contain a single
+datatype. This is contrary to e.g. Python or R where lists can contain
+arbitrarily different types in consecutive elements. Occasionally, it
+can be very beneficial to store different types in the same list, e.g.
+~'a~ and ~int * 'a~. This can be done by defining a more general type
+
+#+begin_src ocaml :results verbatim
+  type 'a value =
+  | One of 'a
+  | Many of int * 'a;;
+#+end_src
+
+#+RESULTS:
+: type 'a value = One of 'a | Many of int * 'a
+
+The names ~One~ and ~Many~ are just that, names, and after ~of~ it is
+specified what type they contain. I think this is what is called an
+enum variant in Rust and maybe other languages? This way, each entry
+in a list can be of type ~'a value~ but then each entry can either
+by ~One a~ or ~Many (i, a)~ to contain a single entry of type ~'a~
+or a tuple of type ~int * 'a~.
+
